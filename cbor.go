@@ -3,7 +3,6 @@
 
 package cbor
 
-
 import "bytes"
 import "errors"
 import "fmt"
@@ -30,8 +29,8 @@ var cbor7 byte = 0xE0
 /* cbor7 values */
 const (
 	cborFalse byte = 20
-	cborTrue byte = 21
-	cborNull byte = 22
+	cborTrue  byte = 21
+	cborNull  byte = 22
 )
 
 /* info bits */
@@ -73,7 +72,7 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 }
 func (dec *Decoder) Decode(v interface{}) error {
-        rv := reflect.ValueOf(v)
+	rv := reflect.ValueOf(v)
 
 	return dec.reflectDecode(rv)
 }
@@ -91,40 +90,40 @@ func (dec *Decoder) reflectDecode(rv reflect.Value) error {
 		return err
 	}
 
-        if (!rv.CanSet()) && (rv.Kind() != reflect.Ptr || rv.IsNil()) {
-                return &InvalidUnmarshalError{rv.Type()}
-        }
+	if (!rv.CanSet()) && (rv.Kind() != reflect.Ptr || rv.IsNil()) {
+		return &InvalidUnmarshalError{rv.Type()}
+	}
 	return dec.innerDecodeC(rv, dec.c[0])
 }
 
 func (dec *Decoder) handleInfoBits(cborInfo byte) (uint64, error) {
 	var aux uint64
 
-	if (cborInfo <= 23) {
+	if cborInfo <= 23 {
 		aux = uint64(cborInfo)
 		return aux, nil
-	} else if (cborInfo == int8Follows) {
+	} else if cborInfo == int8Follows {
 		didread, err := io.ReadFull(dec.rin, dec.b8[:1])
 		if didread == 1 {
 			aux = uint64(dec.b8[0])
 		}
 		return aux, err
-	} else if (cborInfo == int16Follows) {
+	} else if cborInfo == int16Follows {
 		didread, err := io.ReadFull(dec.rin, dec.b8[:2])
 		if didread == 2 {
 			aux = (uint64(dec.b8[0]) << 8) | uint64(dec.b8[1])
 		}
 		return aux, err
-	} else if (cborInfo == int32Follows) {
+	} else if cborInfo == int32Follows {
 		didread, err := io.ReadFull(dec.rin, dec.b8[:4])
 		if didread == 4 {
-		aux = (uint64(dec.b8[0]) << 24) |
-			(uint64(dec.b8[1]) << 16) |
-			(uint64(dec.b8[2]) <<  8) |
-			uint64(dec.b8[3])
+			aux = (uint64(dec.b8[0]) << 24) |
+				(uint64(dec.b8[1]) << 16) |
+				(uint64(dec.b8[2]) << 8) |
+				uint64(dec.b8[3])
 		}
 		return aux, err
-	} else if (cborInfo == int64Follows) {
+	} else if cborInfo == int64Follows {
 		didread, err := io.ReadFull(dec.rin, dec.b8)
 		if didread == 8 {
 			var shift uint = 56
@@ -165,7 +164,7 @@ func (dec *Decoder) innerDecodeC(rv reflect.Value, c byte) error {
 			//log.Printf("built big negint: %v", bn)
 			return setBignum(rv, bn)
 		}
-		return setInt(rv, -1 - int64(aux))
+		return setInt(rv, -1-int64(aux))
 	} else if cborType == cborBytes {
 		//log.Printf("cborType %x bytes cborInfo %d aux %x", cborType, cborInfo, aux)
 		if cborInfo == varFollows {
@@ -182,11 +181,11 @@ func (dec *Decoder) innerDecodeC(rv reflect.Value, c byte) error {
 					// done
 					var out []byte = nil
 					if len(parts) == 0 {
-						out = make([]byte,0)
+						out = make([]byte, 0)
 					} else {
 						pos := 0
-						out = make([]byte,allsize)
-						for _, p := range(parts) {
+						out = make([]byte, allsize)
+						for _, p := range parts {
 							pos += copy(out[pos:], p)
 						}
 					}
@@ -226,70 +225,69 @@ func (dec *Decoder) innerDecodeC(rv reflect.Value, c byte) error {
 	} else if cborType == cborMap {
 		return dec.decodeMap(rv, cborInfo, aux)
 	} else if cborType == cborTag {
-		 /*var innerOb interface{}*/
-		 ic := []byte{0}
-		 _, err = io.ReadFull(dec.rin, ic)
-		 if err != nil {
-			 return err
-		 }
-		 if aux == tagBignum {
-			 bn, err := dec.decodeBignum(ic[0])
-			 if err != nil {
-				 return err
-			 }
-			 return setBignum(rv, bn)
-		 } else if aux == tagNegBignum {
-			 bn, err := dec.decodeBignum(ic[0])
-			 if err != nil {
-				 return err
-			 }
-			 minusOne := big.NewInt(-1)
-			 bnOut := &big.Int{}
-			 bnOut.Sub(minusOne, bn)
-			 return setBignum(rv, bnOut)
-		 } else if aux == tagDecimal {
-			 log.Printf("TODO: directly read bytes into decimal")
-		 } else if aux == tagBigfloat {
-			 log.Printf("TODO: directly read bytes into bigfloat")
-		 } else {
-			 log.Printf("TODO: handle cbor tag: %x", aux)
-			 return dec.innerDecodeC(rv, ic[0])
-		 }
-		 return nil
-	 } else if cborType == cbor7 {
-		 if cborInfo == int16Follows {
-			 exp := (aux >> 10) & 0x01f
-			 mant := aux & 0x03ff
-			 var val float64
-			 if exp == 0 {
-				 val = math.Ldexp(float64(mant), -24)
-			 } else if exp != 31 {
-				 val = math.Ldexp(float64(mant + 1024), int(exp - 25))
-			 } else if mant == 0 {
-				 val = math.Inf(1)
-			 } else {
-				 val = math.NaN()
-			 }
-			 if (aux & 0x08000) != 0 {
-				 val = -val;
-			 }
-			 return setFloat64(rv, val)
-		 } else if cborInfo == int32Follows {
-			 f := math.Float32frombits(uint32(aux))
-			 return setFloat32(rv, f)
-		 } else if cborInfo == int64Follows {
-			 d := math.Float64frombits(aux)
-			 return setFloat64(rv, d)
-		 } else if cborInfo == cborFalse {
-			 reflect.Indirect(rv).Set(reflect.ValueOf(false))
-		 } else if cborInfo == cborTrue {
-			 reflect.Indirect(rv).Set(reflect.ValueOf(true))
-		 } else if cborInfo == cborNull {
-			 return setNil(rv)
-		 }
-	 }
+		/*var innerOb interface{}*/
+		ic := []byte{0}
+		_, err = io.ReadFull(dec.rin, ic)
+		if err != nil {
+			return err
+		}
+		if aux == tagBignum {
+			bn, err := dec.decodeBignum(ic[0])
+			if err != nil {
+				return err
+			}
+			return setBignum(rv, bn)
+		} else if aux == tagNegBignum {
+			bn, err := dec.decodeBignum(ic[0])
+			if err != nil {
+				return err
+			}
+			minusOne := big.NewInt(-1)
+			bnOut := &big.Int{}
+			bnOut.Sub(minusOne, bn)
+			return setBignum(rv, bnOut)
+		} else if aux == tagDecimal {
+			log.Printf("TODO: directly read bytes into decimal")
+		} else if aux == tagBigfloat {
+			log.Printf("TODO: directly read bytes into bigfloat")
+		} else {
+			log.Printf("TODO: handle cbor tag: %x", aux)
+			return dec.innerDecodeC(rv, ic[0])
+		}
+		return nil
+	} else if cborType == cbor7 {
+		if cborInfo == int16Follows {
+			exp := (aux >> 10) & 0x01f
+			mant := aux & 0x03ff
+			var val float64
+			if exp == 0 {
+				val = math.Ldexp(float64(mant), -24)
+			} else if exp != 31 {
+				val = math.Ldexp(float64(mant+1024), int(exp-25))
+			} else if mant == 0 {
+				val = math.Inf(1)
+			} else {
+				val = math.NaN()
+			}
+			if (aux & 0x08000) != 0 {
+				val = -val
+			}
+			return setFloat64(rv, val)
+		} else if cborInfo == int32Follows {
+			f := math.Float32frombits(uint32(aux))
+			return setFloat32(rv, f)
+		} else if cborInfo == int64Follows {
+			d := math.Float64frombits(aux)
+			return setFloat64(rv, d)
+		} else if cborInfo == cborFalse {
+			reflect.Indirect(rv).Set(reflect.ValueOf(false))
+		} else if cborInfo == cborTrue {
+			reflect.Indirect(rv).Set(reflect.ValueOf(true))
+		} else if cborInfo == cborNull {
+			return setNil(rv)
+		}
+	}
 
-	
 	return err
 }
 
@@ -370,7 +368,6 @@ func (irv *mapReflectValue) SetReflectValueForKey(key interface{}, value reflect
 	return nil
 }
 
-
 type structAssigner struct {
 	Srv reflect.Value
 
@@ -383,7 +380,7 @@ func (sa *structAssigner) ReflectValueForKey(key interface{}) (*reflect.Value, b
 	case string:
 		skey = tkey
 	case *string:
-		skey= *tkey
+		skey = *tkey
 	default:
 		log.Printf("rvfk key is not string, got %T", key)
 		return nil, false
@@ -394,7 +391,9 @@ func (sa *structAssigner) ReflectValueForKey(key interface{}) (*reflect.Value, b
 	for i := 0; i < numFields; i++ {
 		sf := ft.Field(i)
 		fieldname, ok := fieldname(sf)
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 		if (fieldname == skey) || strings.EqualFold(fieldname, skey) {
 			fieldVal := sa.Srv.FieldByName(sf.Name)
 			if !fieldVal.CanSet() {
@@ -409,7 +408,6 @@ func (sa *structAssigner) ReflectValueForKey(key interface{}) (*reflect.Value, b
 func (sa *structAssigner) SetReflectValueForKey(key interface{}, value reflect.Value) error {
 	return nil
 }
-
 
 func (dec *Decoder) setMapKV(krv reflect.Value, ma mapAssignable) error {
 	var err error
@@ -435,7 +433,6 @@ func (dec *Decoder) setMapKV(krv reflect.Value, ma mapAssignable) error {
 
 	return nil
 }
-
 
 func (dec *Decoder) decodeMap(rv reflect.Value, cborInfo byte, aux uint64) error {
 	//log.Print("decode map into   ", rv.Type().String())
@@ -651,15 +648,14 @@ func (dec *Decoder) decodeBignum(c byte) (*big.Int, error) {
 	bn := big.NewInt(0)
 	littleBig := &big.Int{}
 	d := &big.Int{}
-	for _, bv := range(rawbytes) {
+	for _, bv := range rawbytes {
 		d.Lsh(bn, 8)
 		littleBig.SetUint64(uint64(bv))
 		bn.Or(d, littleBig)
 	}
-	
+
 	return bn, nil
 }
-
 
 func setBignum(rv reflect.Value, x *big.Int) error {
 	switch rv.Kind() {
@@ -794,7 +790,6 @@ func setNil(rv reflect.Value) error {
 	return nil
 }
 
-
 // copied from encoding/json/decode.go
 // An InvalidUnmarshalError describes an invalid argument passed to Unmarshal.
 // (The argument to Unmarshal must be a non-nil pointer.)
@@ -813,12 +808,10 @@ func (e *InvalidUnmarshalError) Error() string {
 	return "json: Unmarshal(nil " + e.Type.String() + ")"
 }
 
-
 type CBORTag struct {
-	Tag uint64
+	Tag           uint64
 	WrappedObject interface{}
 }
-
 
 type Encoder struct {
 	out io.Writer
@@ -887,7 +880,6 @@ func NewEncoder(out io.Writer) *Encoder {
 	return &Encoder{out, make([]byte, 9)}
 }
 
-
 func (enc *Encoder) Encode(ob interface{}) error {
 	switch x := ob.(type) {
 	case int:
@@ -902,7 +894,7 @@ func (enc *Encoder) Encode(ob interface{}) error {
 		return enc.writeInt(x)
 	case uint:
 		return enc.tagAuxOut(cborUint, uint64(x))
-	case uint8:  /* aka byte */
+	case uint8: /* aka byte */
 		return enc.tagAuxOut(cborUint, uint64(x))
 	case uint16:
 		return enc.tagAuxOut(cborUint, uint64(x))
@@ -925,7 +917,7 @@ func (enc *Encoder) Encode(ob interface{}) error {
 	case big.Int:
 		return fmt.Errorf("TODO: encode big.Int")
 	}
-	
+
 	// If none of the simple types work, try reflection
 	return enc.writeReflection(reflect.ValueOf(ob))
 }
@@ -962,7 +954,7 @@ func (enc *Encoder) writeReflection(rv reflect.Value) error {
 	case reflect.Map:
 		err = enc.tagAuxOut(cborMap, uint64(rv.Len()))
 		keys := rv.MapKeys()
-		for _, krv := range(keys) {
+		for _, krv := range keys {
 			vrv := rv.MapIndex(krv)
 			err = enc.writeReflection(krv)
 			if err != nil {
@@ -984,7 +976,9 @@ func (enc *Encoder) writeReflection(rv reflect.Value) error {
 		for i := 0; i < numfields; i++ {
 			fieldinfo := structType.Field(i)
 			_, ok := fieldname(fieldinfo)
-			if !ok { continue }
+			if !ok {
+				continue
+			}
 			usableFields++
 		}
 		err = enc.tagAuxOut(cborMap, uint64(usableFields))
@@ -994,7 +988,9 @@ func (enc *Encoder) writeReflection(rv reflect.Value) error {
 		for i := 0; i < numfields; i++ {
 			fieldinfo := structType.Field(i)
 			fieldname, ok := fieldname(fieldinfo)
-			if !ok { continue }
+			if !ok {
+				continue
+			}
 			err = enc.writeText(fieldname)
 			if err != nil {
 				return err
@@ -1019,8 +1015,8 @@ func (enc *Encoder) writeReflection(rv reflect.Value) error {
 }
 
 func (enc *Encoder) writeInt(x int64) error {
-	if (x < 0) {
-		return enc.tagAuxOut(cborNegint, uint64(-1 - x))
+	if x < 0 {
+		return enc.tagAuxOut(cborNegint, uint64(-1-x))
 	}
 	return enc.tagAuxOut(cborUint, uint64(x))
 }
@@ -1044,7 +1040,7 @@ func (enc *Encoder) tagAuxOut(tag byte, x uint64) error {
 		enc.scratch[0] = tag | int32Follows
 		enc.scratch[1] = byte((x >> 24) & 0x0ff)
 		enc.scratch[2] = byte((x >> 16) & 0x0ff)
-		enc.scratch[3] = byte((x >>  8) & 0x0ff)
+		enc.scratch[3] = byte((x >> 8) & 0x0ff)
 		enc.scratch[4] = byte(x & 0x0ff)
 		_, err = enc.out.Write(enc.scratch[:5])
 	} else {
@@ -1060,7 +1056,7 @@ func (enc *Encoder) tagAux64(tag byte, x uint64) error {
 	enc.scratch[4] = byte((x >> 32) & 0x0ff)
 	enc.scratch[5] = byte((x >> 24) & 0x0ff)
 	enc.scratch[6] = byte((x >> 16) & 0x0ff)
-	enc.scratch[7] = byte((x >>  8) & 0x0ff)
+	enc.scratch[7] = byte((x >> 8) & 0x0ff)
 	enc.scratch[8] = byte(x & 0x0ff)
 	_, err := enc.out.Write(enc.scratch[:9])
 	return err
