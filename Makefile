@@ -1,12 +1,12 @@
-#PATH:=${HOME}/psrc/golang/go/bin:${PATH}
-#PATH += ${HOME}/psrc/golang/go/bin
-GOROOT=${HOME}/psrc/golang/go
-GOPATH=${HOME}/psrc/gopath
 
-GO=${GOROOT}/bin/go
+build:
+	go build
 
-all:
-	${GO} build
+test: deps
+	go test
 
-test:
-	${GO} test
+deps: test-vectors
+
+test-vectors:
+	@echo "installing test-vectors"
+	git clone https://github.com/cbor/test-vectors
