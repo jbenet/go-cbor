@@ -21,12 +21,11 @@ type testVector struct {
 	Diagnostic string
 }
 
-var errpath string = "../test-vectors/appendix_a.json"
+var errpath string = "./test-vectors/appendix_a.json"
 
-func readVectors(t *testing.T) ([]testVector, error) {
+func readVectors() ([]testVector, error) {
 	fin, err := os.Open(errpath)
 	if err != nil {
-		t.Error("could not open test vectors at: ", errpath)
 		return nil, err
 	}
 	jd := json.NewDecoder(fin)
@@ -196,7 +195,7 @@ func TestDecodeVectors(t *testing.T) {
 	//t.Parallel()
 
 	t.Log("test standard decode vectors")
-	they, err := readVectors(t)
+	they, err := readVectors()
 	if err != nil {
 		t.Fatal("could not load test vectors:", err)
 		return
@@ -577,5 +576,104 @@ func TestStructTags(t *testing.T) {
 	}
 	if ob != ob2 {
 		t.Errorf("a!=b %#v != %#v", ob, ob2)
+	}
+}
+
+func BenchmarkDecode(t *testing.B) {
+	t.Log("benchmark decode")
+	they, err := readVectors()
+	if err != nil {
+		t.Fatal("could not load test vectors:", err)
+		return
+	}
+
+	t.Logf("got %d test vectors", len(they))
+	if len(they) <= 0 {
+		t.Fatal("got no test vectors")
+		return
+	}
+
+	data := [][]byte{}
+	for i, testv := range they {
+		bin, err := base64.StdEncoding.DecodeString(testv.Cbor)
+		if err != nil {
+			t.Logf("test[%d] %#v", i, testv)
+			t.Logf("decoding [%d] %#v ...\n", i, testv.Cbor)
+			t.Fatal("could not decode test vector b64")
+			return
+		}
+
+		data = append(data, bin)
+	}
+
+	t.ResetTimer()
+
+	for n := 0; n < t.N; n++ {
+		for i, testv := range they {
+			ring := NewDecoder(bytes.NewReader(data[i]))
+			var cborObject interface{}
+			err = ring.Decode(&cborObject)
+			if err != nil {
+				t.Logf("test[%d] %#v", i, testv)
+				t.Logf("decoding [%d] %#v ...\n", i, testv.Cbor)
+				t.Fatalf("error decoding cbor: %v", err)
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkEncode(t *testing.B) {
+	t.Log("benchmark decode")
+	they, err := readVectors()
+	if err != nil {
+		t.Fatal("could not load test vectors:", err)
+		return
+	}
+
+	t.Logf("got %d test vectors", len(they))
+	if len(they) <= 0 {
+		t.Fatal("got no test vectors")
+		return
+	}
+
+	data := [][]byte{}
+	decd := []interface{}{}
+	for i, testv := range they {
+		bin, err := base64.StdEncoding.DecodeString(testv.Cbor)
+		if err != nil {
+			t.Logf("test[%d] %#v", i, testv)
+			t.Logf("decoding [%d] %#v ...\n", i, testv.Cbor)
+			t.Fatal("could not decode test vector b64")
+			return
+		}
+
+		data = append(data, bin)
+
+		ring := NewDecoder(bytes.NewReader(data[i]))
+		var cborObject interface{}
+		err = ring.Decode(&cborObject)
+		if err != nil {
+			t.Logf("test[%d] %#v", i, testv)
+			t.Logf("decoding [%d] %#v ...\n", i, testv.Cbor)
+			t.Fatalf("error decoding cbor: %v", err)
+			return
+		}
+
+		decd = append(decd, cborObject)
+	}
+
+	writeTarget := &bytes.Buffer{}
+	writeTarget.Grow(20000)
+
+	t.ResetTimer()
+
+	for n := 0; n < t.N; n++ {
+		for i, _ := range decd {
+			err := Encode(writeTarget, decd[i])
+			if err != nil {
+				t.Fatalf("error encoding %d cbor: %v", i, err)
+			}
+		}
 	}
 }

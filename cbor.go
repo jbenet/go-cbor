@@ -251,7 +251,7 @@ func (dec *Decoder) innerDecodeC(rv reflect.Value, c byte) error {
 		} else if aux == tagBigfloat {
 			log.Printf("TODO: directly read bytes into bigfloat")
 		} else {
-			log.Printf("TODO: handle cbor tag: %x", aux)
+			// log.Printf("TODO: handle cbor tag: %x", aux)
 			return dec.innerDecodeC(rv, ic[0])
 		}
 		return nil
